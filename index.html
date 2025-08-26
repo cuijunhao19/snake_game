@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>贪吃蛇游戏</title>
+    <script type="text/javascript" src="./JS/vue.js"></script>
+    <link rel="stylesheet" href="./CSS/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>🐍 贪吃蛇游戏 🐍</h1>
+
+      <div class="box">
+        <span>分数：<span id="foodNum">{{ foodNum }}</span></span>
+        <span>
+          <label for="setSpeed">速度：</label>
+          <select id="setSpeed" v-model="speed" @change="setSpeed">
+            <option value="150">慢速</option>
+            <option value="100">中速</option>
+            <option value="50">快速</option>
+          </select>
+        </span>
+        <span>空格键 开始/暂停</span>
+      </div>
+
+      <div
+        class="show"
+        v-show="isshow"
+        :class="{ pause: result === '游戏暂停', running: result === '游戏进行中' }"
+      >
+        {{ result }}
+      </div>
+      <div class="map-container">
+        <table id="map"></table>
+      </div>
+
+      <div class="instructions">
+        <h3>游戏说明</h3>
+        <p>使用 ↑ ↓ ← → 方向键控制蛇的移动</p>
+        <p>按空格键开始/暂停游戏</p>
+        <p>吃到红色食物增加分数</p>
+        <p>撞到墙壁或自身游戏结束</p>
+      </div>
+    </div>
+    <script type="text/javascript">
+      var vm = new Vue({
+        el: "#app",
+        data: {
+          rows: 21, // 21行
+          cols: 21, // 21列
+          speed: 100, // 前进速度
+          curKey: 0, // 当前方向按键键码值
+          timer: 0,
+          pos: [], // 蛇身位置
+          foodPos: { x: -1, y: -1 },
+          foodNum: -1, // 吃掉食物数量
+          dom: null, // 地图元素
+          pause: 1, // 1表示暂停，-1表示开始
+          isshow: false, // 是否显示游戏提示
+          result: "", // 提示信息
+        },
+
+        methods: {
+          map: function () {
+            // 创建地图
+            if (this.dom.firstChild) {
+              this.dom.removeChild(this.dom.firstChild); // 重新开始，删除之前的tbody
+            }
+            for (j = 0; j < this.rows; j++) {
+              var tr = this.dom.insertRow(-1); // 插入一行
+              for (i = 0; i < this.cols; i++) {
+                tr.insertCell(-1);
+              }
+            }
+          },
+
+          food: function () {
+            // 生成食物
+            do {
+              this.foodPos.y = Math.floor(Math.random() * this.rows);
+              this.foodPos.x = Math.floor(Math.random() * this.cols);
+            } while (
+              this.dom.rows[this.foodPos.y].cells[this.foodPos.x].className !=
+              ""
+            ); // 防止食物生成在蛇身上
+
+            this.dom.rows[this.foodPos.y].cells[this.foodPos.x].className =
+              "snakefood"; // 设置食物样式
+            this.foodNum++; // 设置分数
+          },
+
+          init: function () {
+            this.map(); // 创建地图
+            window.clearInterval(this.timer); // 停止
+            this.pos = [
+              { x: 2, y: 0 },
+              { x: 1, y: 0 },
+              { x: 0, y: 0 },
+            ]; // 定义蛇身位置
+            for (var j = 0; j < this.pos.length; j++) {
+              // 显示蛇身
+              this.dom.rows[this.pos[j].y].cells[this.pos[j].x].className =
+                "snakebody";
+            }
+            this.dom.rows[this.pos[0].y].cells[this.pos[0].x].className =
+              "snakehead"; // 为蛇头设置样式
+            this.curKey = 0; // 当前键码值
+            this.foodNum = -1; // 吃掉的食物数量
+            this.food(); // 生成食物
+            this.pause = 1; // 1表示暂停，-1表示开始
+          },
+
+          setSpeed: function (event) {
+            event.target.blur(); // 下拉菜单失去焦点
+            this.init(); // 游戏初始化
+            this.isshow = false; // 隐藏游戏提示
+          },
+
+          trigger: function (event) {
+            var _t = this;
+            var ekey = event.keyCode; // 获取键码值
+            if (
+              ekey >= 37 &&
+              ekey <= 40 &&
+              ekey != this.curKey &&
+              !(
+                (this.curKey == 37 && ekey == 39) ||
+                (this.curKey == 38 && ekey == 40) ||
+                (this.curKey == 39 && ekey == 37) ||
+                (this.curKey == 40 && ekey == 38) ||
+                this.pause == 1
+              )
+            ) {
+              this.curKey = ekey; // 设置当前方向按键码
+            } else if (ekey == 32) {
+              this.curKey = this.curKey == 0 ? 39 : this.curKey;
+              this.pause *= -1;
+              if (this.pause == -1) {
+                this.timer = window.setInterval(function () {
+                  _t.move();
+                }, this.speed); // 蛇身移动
+
+                this.isshow = true; // 显示游戏提示
+                this.result = "游戏进行中";
+              } else {
+                window.clearInterval(this.timer); // 停止
+                this.result = "游戏暂停";
+              }
+            }
+
+            event.preventDefault();
+          },
+
+          move: function () {
+            // 移动
+            switch (this.curKey) {
+              case 37: // 左
+                if (this.pos[0].x <= 0) {
+                  // 蛇头碰到边界
+                  this.over();
+                  return;
+                } else {
+                  this.pos.unshift({ x: this.pos[0].x - 1, y: this.pos[0].y }); // 添加元素
+                }
+                break;
+
+              case 38: // 上
+                if (this.pos[0].y <= 0) {
+                  // 蛇头碰到边界
+                  this.over();
+                  return;
+                } else {
+                  this.pos.unshift({ x: this.pos[0].x, y: this.pos[0].y - 1 }); // 添加元素
+                }
+                break;
+
+              case 39: // 右
+                if (this.pos[0].x >= this.cols - 1) {
+                  // 蛇头碰到边界
+                  this.over();
+                  return;
+                } else {
+                  this.pos.unshift({ x: this.pos[0].x + 1, y: this.pos[0].y }); // 添加元素
+                }
+                break;
+
+              case 40: // 下
+                if (this.pos[0].y >= this.rows - 1) {
+                  // 蛇头碰到边界
+                  this.over();
+                  return;
+                } else {
+                  this.pos.unshift({ x: this.pos[0].x, y: this.pos[0].y + 1 }); // 添加元素
+                }
+                break;
+            }
+            if (
+              this.pos[0].x == this.foodPos.x &&
+              this.pos[0].y == this.foodPos.y
+            ) {
+              // 蛇头位置与食物重叠
+              this.food(); // 生成食物并加分
+            } else if (this.curKey != 0) {
+              this.dom.rows[this.pos[this.pos.length - 1].y].cells[
+                this.pos[this.pos.length - 1].x
+              ].className = "";
+              this.pos.pop(); // 删除蛇尾
+            }
+            for (i = 3; i < this.pos.length; i++) {
+              // 从蛇的第4截开始判断是否撞到自己
+              if (
+                this.pos[i].x == this.pos[0].x &&
+                this.pos[i].y == this.pos[0].y
+              ) {
+                this.over(); // 游戏结束
+                return;
+              }
+            }
+            this.dom.rows[this.pos[0].y].cells[this.pos[0].x].className =
+              "snakehead"; // 画新蛇头
+            this.dom.rows[this.pos[1].y].cells[this.pos[1].x].className =
+              "snakebody"; // 原蛇头变为蛇身
+          },
+
+          over: function () {
+            this.result = "游戏结束";
+            window.clearInterval(this.timer); // 停止
+            document.onkeydown = null;
+            var t = this;
+            setTimeout(function () {
+              t.isshow = false; // 隐藏游戏提示
+              t.init(); // 重置游戏
+              document.onkeydown = function (event) {
+                t.trigger(event); // 按下按键时调用方法
+              };
+            }, 1500);
+          },
+        },
+
+        mounted: function () {
+          this.dom = document.getElementById("map");
+          this.init();
+          document.onkeydown = (event) => {
+            this.trigger(event);
+          };
+        },
+      });
+    </script>
+  </body>
+</html>
